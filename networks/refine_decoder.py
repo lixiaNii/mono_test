@@ -12,7 +12,7 @@ from collections import OrderedDict
 from layers import *
 
 
-class DepthDecoder(nn.Module):
+class RefDepthDecoder(nn.Module):
     def __init__(self, enc_channels, source_num=1, projection=None, dconverter=None,
                  scale_num=4, use_warp=False, use_skips=True, use_coarse=False, use_orig=False):
         super().__init__()
@@ -32,6 +32,7 @@ class DepthDecoder(nn.Module):
         # Note: if use warp, must use orig
         # but use orig may not use warp
         self.coarse_num = 3  # number of coarse depth
+        self.out_residual = False  # whether use network output as residual
         # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         self.num_ch_enc = enc_channels  # scale down sequence
@@ -51,7 +52,7 @@ class DepthDecoder(nn.Module):
             num_ch_in = self.num_ch_dec[i]
             if self.use_skips:
                 t = i if self.use_orig else i - 1
-                if t > 0:
+                if t >= 0:
                     num_ch_in += self.num_ch_enc[t] * self.source_num
                     # input warped features, must use orig
                     if self.use_warp and t < self.coarse_num:
@@ -77,7 +78,7 @@ class DepthDecoder(nn.Module):
             # self.convs[("upconv", i, 1)] = ConvBlock(num_ch_in, num_ch_out)
 
         for s in self.scales:
-            self.convs[("depthconv", s)] = Conv3x3(self.num_ch_dec[s], 1)  # output depth residual
+            self.convs[("dispconv", s)] = Conv3x3(self.num_ch_dec[s], 1)  # output depth residual
         # self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
         self.decoder = nn.ModuleList(list(self.convs.values()))
@@ -110,8 +111,8 @@ class DepthDecoder(nn.Module):
             x = [upsample(x)]
             t = i if self.use_orig else i - 1  # index shift if use original image
             if self.use_skips:
-                if t > 0:
-                    x += input_features[t]
+                if t >= 0:
+                    x += [input_features[t]]
                     if self.use_warp and t < self.coarse_num:
                         feats_warped = self.warp_block(depth=input_depth[t],
                                                        feats=input_features[t],
@@ -124,9 +125,9 @@ class DepthDecoder(nn.Module):
 
             # output
             if i in self.scales:
-                self.outputs[("disp", i)] = self.sigmoid(self.convs[("depthconv", 2)](x)) - 0.5
+                self.outputs[("disp", i)] = self.sigmoid(self.convs[("dispconv", i)](x))
                 if self.out_residual:
-                    self.outputs[("disp", i)] += input_depth[t]
+                    self.outputs[("disp", i)] += input_depth[t] - 0.5
 
         return self.outputs
 

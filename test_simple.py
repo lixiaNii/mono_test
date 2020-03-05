@@ -22,13 +22,18 @@ import networks
 from layers import disp_to_depth
 from utils import download_model_if_doesnt_exist
 
+from trainer import nl
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Simple testing funtion for Monodepthv2 models.')
 
+    # parser.add_argument('--image_path', type=str,
+    #                     help='path to a test image or folder of images', required=True)
     parser.add_argument('--image_path', type=str,
-                        help='path to a test image or folder of images', required=True)
+                        help='path to a test image or folder of images',
+                        default='assets/test_image.jpg')
+
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
@@ -40,7 +45,8 @@ def parse_args():
                             "mono+stereo_no_pt_640x192",
                             "mono_1024x320",
                             "stereo_1024x320",
-                            "mono+stereo_1024x320"])
+                            "mono+stereo_1024x320"],
+                        default="mono+stereo_640x192")
     parser.add_argument('--ext', type=str,
                         help='image extension to search for in folder', default="jpg")
     parser.add_argument("--no_cuda",
@@ -81,8 +87,12 @@ def test_simple(args):
     encoder.eval()
 
     print("   Loading pretrained decoder")
-    depth_decoder = networks.DepthDecoder(
-        num_ch_enc=encoder.num_ch_enc, scales=range(4))
+    if nl.use_refine:
+        depth_decoder = networks.RefDepthDecoder(
+            enc_channels=encoder.num_ch_enc, scale_num=4)
+    else:
+        depth_decoder = networks.DepthDecoder(
+            num_ch_enc=encoder.num_ch_enc, scales=range(4))
 
     loaded_dict = torch.load(depth_decoder_path, map_location=device)
     depth_decoder.load_state_dict(loaded_dict)

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="lixia@cai4" uploadOnCheckin="e065d5e2-7367-4de6-a247-8d65c6a506c5">
+    <serverData>
+      <paths name="lixia@cai4">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/lixia/projects_ibr/mono_test" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="lixia@haiyong">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="lixia@zju">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myUploadOnCheckinName" value="lixia@cai4" />
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

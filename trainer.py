@@ -26,6 +26,20 @@ import networks
 from IPython import embed
 
 
+# NL::params
+# ===========================================
+class NLParams():
+    def __init__(self):
+        self.use_mvs = True
+        self.use_refine = False
+
+
+nl = NLParams()
+
+
+# ===========================================
+
+
 class Trainer:
     def __init__(self, options):
         self.opt = options
@@ -56,8 +70,13 @@ class Trainer:
         self.models["encoder"].to(self.device)
         self.parameters_to_train += list(self.models["encoder"].parameters())
 
-        self.models["depth"] = networks.DepthDecoder(
-            self.models["encoder"].num_ch_enc, self.opt.scales)
+        # future test refine net
+        if nl.use_refine:
+            self.models["depth"] = networks.RefDepthDecoder(
+                self.models["encoder"].num_ch_enc)
+        else:
+            self.models["depth"] = networks.DepthDecoder(
+                self.models["encoder"].num_ch_enc, self.opt.scales)
         self.models["depth"].to(self.device)
         self.parameters_to_train += list(self.models["depth"].parameters())
 
@@ -112,16 +131,30 @@ class Trainer:
 
         # data
         datasets_dict = {"kitti": datasets.KITTIRAWDataset,
-                         "kitti_odom": datasets.KITTIOdomDataset}
-        self.dataset = datasets_dict[self.opt.dataset]
+                         "kitti_odom": datasets.KITTIOdomDataset,
+                         "mvs_syn": datasets.MVSSynDataset}  # NL::MVS Syn dataset
 
-        fpath = os.path.join(os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
+        # mvs, not standard splits
+        if nl.use_mvs:
+            self.dataset = datasets_dict["mvs_syn"]
+            train_filenames = None
+            val_filenames = None
+            img_ext = '.png'
 
-        train_filenames = readlines(fpath.format("train"))
-        val_filenames = readlines(fpath.format("val"))
-        img_ext = '.png' if self.opt.png else '.jpg'
+            # 120 scenes in total, seems only to control steps
+            num_train_samples = 120 * 30
+            self.opt.data_path = '/mnt/win_data2/data/lixia/MVS_Syn/GTAV_720'
+        # monodepth splits
+        else:
+            self.dataset = datasets_dict[self.opt.dataset]
+            fpath = os.path.join(os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
 
-        num_train_samples = len(train_filenames)
+            train_filenames = readlines(fpath.format("train"))
+            val_filenames = readlines(fpath.format("val"))
+            img_ext = '.png' if self.opt.png else '.jpg'
+
+            num_train_samples = len(train_filenames)
+
         self.num_total_steps = num_train_samples // self.opt.batch_size * self.opt.num_epochs
 
         train_dataset = self.dataset(
@@ -201,6 +234,11 @@ class Trainer:
         for batch_idx, inputs in enumerate(self.train_loader):
 
             before_op_time = time.time()
+
+            # NL::save inputs to check interval
+            save_images([inputs[("color", i, 0)] for i in self.opt.frame_ids],
+                        names=['b{:04d}'.format(batch_idx) + 'i{:01d}'.format(i + 1)
+                               for i in self.opt.frame_ids])
 
             outputs, losses = self.process_batch(inputs)
 

@@ -10,6 +10,25 @@ import hashlib
 import zipfile
 from six.moves import urllib
 
+from torchvision.utils import save_image
+
+
+# NL utils ===========================================================
+def save_images(images, names):
+    """Save list of images with given names，
+
+    """
+    cache_root = '/mnt/win_data2/data/lixia/_rst/mono_test/cache'
+
+    root = cache_root
+    for im, n in zip(images, names):
+        # normed = im + 0.5
+        normed = im[0]
+        save_image(normed, os.path.join(root, n + '.png'))
+
+
+# NL utils ===========================================================
+
 
 def readlines(filename):
     """Read all the lines in a text file and return as a list
