@@ -22,7 +22,7 @@ import networks
 from layers import disp_to_depth
 from utils import download_model_if_doesnt_exist
 
-from trainer import nl
+from options import nl
 
 def parse_args():
     parser = argparse.ArgumentParser(

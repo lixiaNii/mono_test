@@ -12,10 +12,42 @@ import argparse
 file_dir = os.path.dirname(__file__)  # the directory that options.py resides in
 # NL::
 data_dir = "/mnt/win_data2/data/lixia"
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 
 
-# NL::
+# NL::params
+# ===========================================
+class NLParams():
+    def __init__(self):
+        self.use_mvs = True  # decide which dataset to use
+        self.use_refine = True  # same basic structure w/ original decoder
+        self.use_gt_pose = True  # use gt pose to transform if True
+        self.fix_sequence = True  # train on single sequence if True
+
+        self.load_pretrain = {"encoder": True, "depth": True,
+                              "pose_encoder": True, "pose": True}
+
+        self.num_batch = 2  # orig: 12
+        self.num_workers = self.num_batch  # orig: 12
+
+        self.model_name = "mono+stereo_640x192"
+        self.model_path = os.path.join("models", self.model_name)  # if not load, set None
+
+        self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
+
+        self.skip_valid = True
+        self.learning_rate = 1e-5  # original: 1e-4
+
+        # RefDepthDecoder settings
+        self.settings = {"use_warp": False, "use_coarse": False,
+                         "use_orig": False, "use_source": False,
+                         "out_residual": False}
+
+
+nl = NLParams()
+
+
+# ===========================================
 
 class MonodepthOptions:
     def __init__(self):
@@ -30,7 +62,7 @@ class MonodepthOptions:
         self.parser.add_argument("--log_dir",
                                  type=str,
                                  help="log directory",
-                                 default="/mnt/win_data2/data/lixia/_rst/mono_test")
+                                 default=nl.log_dir)
         # default=os.path.join(os.path.expanduser("~"), "tmp"))
 
         # TRAINING options
@@ -59,11 +91,11 @@ class MonodepthOptions:
         self.parser.add_argument("--height",
                                  type=int,
                                  help="input image height",
-                                 default=192)
+                                 default=352 if nl.use_mvs else 192)
         self.parser.add_argument("--width",
                                  type=int,
                                  help="input image width",
-                                 default=640)
+                                 default=640)  # 640
         self.parser.add_argument("--disparity_smoothness",
                                  type=float,
                                  help="disparity smoothness weight",
@@ -94,11 +126,11 @@ class MonodepthOptions:
         self.parser.add_argument("--batch_size",
                                  type=int,
                                  help="batch size",
-                                 default=6)  # NL::default is 12
+                                 default=nl.num_batch)  # NL::default is 12
         self.parser.add_argument("--learning_rate",
                                  type=float,
                                  help="learning rate",
-                                 default=1e-4)
+                                 default=nl.learning_rate)  # 1e-4
         self.parser.add_argument("--num_epochs",
                                  type=int,
                                  help="number of epochs",
@@ -147,12 +179,13 @@ class MonodepthOptions:
         self.parser.add_argument("--num_workers",
                                  type=int,
                                  help="number of dataloader workers",
-                                 default=12)
+                                 default=nl.num_workers)  # 12
 
         # LOADING options
         self.parser.add_argument("--load_weights_folder",
                                  type=str,
-                                 help="name of model to load")
+                                 help="name of model to load",
+                                 default=nl.model_path if nl.load_pretrain else None)
         self.parser.add_argument("--models_to_load",
                                  nargs="+",
                                  type=str,

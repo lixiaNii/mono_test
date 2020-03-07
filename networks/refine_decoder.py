@@ -11,10 +11,12 @@ import numpy as np
 from collections import OrderedDict
 from layers import *
 
+from options import nl
+
 
 class RefDepthDecoder(nn.Module):
-    def __init__(self, enc_channels, source_num=1, projection=None, dconverter=None,
-                 scale_num=4, use_warp=False, use_skips=True, use_coarse=False, use_orig=False):
+    def __init__(self, enc_channels, source_num=1, projection=None, dconverter=None, scale_num=4):
+        # use_warp=False, use_coarse=False, use_orig=False):
         super().__init__()
 
         self.projection = projection
@@ -22,17 +24,15 @@ class RefDepthDecoder(nn.Module):
         self.source_num = source_num
         self.scale_num = scale_num
         self.scales = range(self.scale_num)
-        self.use_skips = use_skips
+        self.use_skips = True
         # control differences between mine and mono decoder ++++++++++++++++++++++
-        self.use_warp = use_warp  # whether use coarse depth
-        self.use_coarse = use_coarse  # whether input coarse depth
-        self.use_orig = True if self.use_warp else use_orig  # TODO: note
-        # whether use original image,
-        # cuz monodepth2 only use resnet features
-        # Note: if use warp, must use orig
-        # but use orig may not use warp
+        self.out_residual = nl.settings["out_residual"]  # whether use network output as residual
+        self.use_warp = nl.settings["use_warp"]  # whether use coarse depth
+        self.use_coarse = nl.settings["use_coarse"]  # whether input coarse depth
+        self.use_source = nl.settings["use_source"]  # whether use source features
+        self.use_orig = True if self.use_warp \
+            else nl.settings["use_orig"]  # whether use original image,
         self.coarse_num = 3  # number of coarse depth
-        self.out_residual = False  # whether use network output as residual
         # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         self.num_ch_enc = enc_channels  # scale down sequence

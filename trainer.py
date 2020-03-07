@@ -25,25 +25,18 @@ import datasets
 import networks
 from IPython import embed
 
-
-# NL::params
-# ===========================================
-class NLParams():
-    def __init__(self):
-        self.use_mvs = True
-        self.use_refine = False
-
-
-nl = NLParams()
-
-
-# ===========================================
+import datetime
+from options import nl
 
 
 class Trainer:
     def __init__(self, options):
         self.opt = options
-        self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
+        # self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
+        dir_name = os.path.join(datetime.datetime.now().strftime('%m_%d') + '_' +
+                                datetime.datetime.now().strftime('%H-%M-%S') + '_' +
+                                self.opt.model_name)
+        self.log_path = os.path.join(self.opt.log_dir, dir_name)
 
         # checking height and width are multiples of 32
         assert self.opt.height % 32 == 0, "'height' must be a multiple of 32"
@@ -70,10 +63,11 @@ class Trainer:
         self.models["encoder"].to(self.device)
         self.parameters_to_train += list(self.models["encoder"].parameters())
 
-        # future test refine net
+        # test refine net ++++++++++++++++++++++++++++++++++++++++++++++
         if nl.use_refine:
             self.models["depth"] = networks.RefDepthDecoder(
                 self.models["encoder"].num_ch_enc)
+        # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         else:
             self.models["depth"] = networks.DepthDecoder(
                 self.models["encoder"].num_ch_enc, self.opt.scales)
@@ -172,8 +166,13 @@ class Trainer:
         self.val_iter = iter(self.val_loader)
 
         self.writers = {}
-        for mode in ["train", "val"]:
+
+        if nl.skip_valid:
+            mode = "train"
             self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
+        else:
+            for mode in ["train", "val"]:
+                self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
 
         if not self.opt.no_ssim:
             self.ssim = SSIM()
@@ -236,9 +235,9 @@ class Trainer:
             before_op_time = time.time()
 
             # NL::save inputs to check interval
-            save_images([inputs[("color", i, 0)] for i in self.opt.frame_ids],
-                        names=['b{:04d}'.format(batch_idx) + 'i{:01d}'.format(i + 1)
-                               for i in self.opt.frame_ids])
+            # save_images([inputs[("color", i, 0)] for i in self.opt.frame_ids],
+            #             names=['b{:04d}'.format(batch_idx) + 'i{:01d}'.format(i + 1)
+            #                    for i in self.opt.frame_ids])
 
             outputs, losses = self.process_batch(inputs)
 
@@ -259,7 +258,9 @@ class Trainer:
                     self.compute_depth_losses(inputs, outputs, losses)
 
                 self.log("train", inputs, outputs, losses)
-                self.val()
+
+                if not nl.skip_valid:
+                    self.val()
 
             self.step += 1
 
@@ -399,6 +400,9 @@ class Trainer:
                     T = inputs["stereo_T"]
                 else:
                     T = outputs[("cam_T_cam", 0, frame_id)]
+
+                    if nl.use_gt_pose:
+                        T = inputs[("cam_T_cam", 0, frame_id)]
 
                 # from the authors of https://arxiv.org/abs/1712.00175
                 if self.opt.pose_model_type == "posecnn":

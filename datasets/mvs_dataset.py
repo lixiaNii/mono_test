@@ -14,6 +14,7 @@ from PIL import Image
 import json
 from numpy import linalg as la
 
+from options import nl
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning
@@ -59,21 +60,6 @@ class MVSSynDataset(data.Dataset):
     def check_depth(self):
         pass
 
-    # def get_image_path(self, folder, frame_index):
-    #     # f_str = "{:04d}{}".format(frame_index, )
-    #     image_path = os.path.join(
-    #         self.data_path,
-    #         "{:04d}/images".format(int(folder)),        # 0000
-    #         "{:04d}{}".format(frame_index, ".png"))
-    #     return image_path
-    #
-    # def get_pose_path(self, folder, frame_index):
-    #     pose_path = os.path.join(
-    #         self.data_path,
-    #         "{:04d}/poses".format(int(folder)),         # 0000
-    #         "{:04d}{}".format(frame_index, ".json"))    # 0000.png
-    #     return pose_path
-
     def get_path(self, folder, frame_index, type='', ext=''):
         path = os.path.join(
             self.data_path,
@@ -92,6 +78,9 @@ class MVSSynDataset(data.Dataset):
         return color
 
     def get_cam(self, scene_index, frame_index):
+        """Load intrinsics and extrinsics for frame
+            intrinsics: unit: pixel
+            extrinsics: loaded as world2cam, transform to cam2world and return"""
         filename = self.get_path(scene_index, frame_index, type="poses", ext=".json")
         with open(filename) as f:
             info = json.load(f)
@@ -113,7 +102,17 @@ class MVSSynDataset(data.Dataset):
         images in this item. This ensures that all images input to the pose network receive the
         same augmentation.
         """
-        # resize
+
+        # crop, cuz mvs-syn: 1280*720 --> 640*352, pil image: (1280, 720)
+        bd = 8
+        w, h = inputs[("color", 0, -1)].size
+        for k in list(inputs):
+            if "color" in k:
+                n, im, i = k
+                # inputs[(n, im, i)] = inputs[(n, im, i)][bd:-bd, bd:-bd, :]
+                inputs[(n, im, i)] = inputs[(n, im, i)].crop((0, bd, w, h - bd))
+
+                # resize
         for k in list(inputs):
             frame = inputs[k]
             if "color" in k:
@@ -167,25 +166,36 @@ class MVSSynDataset(data.Dataset):
         # folder = line[0]
         # ...
 
-        # MVS-Syn
-        # scene_index = np.random.randint(0, 120)    # 120 scenes
-        # frame_index = np.random.randint(1, 99)    # 100 images
-        # overfit
-        scene_index = 0
-        frame_index = 10
+        # MVS-Syn, 120 scenes, each w/ 100 images
+        if nl.fix_sequence:
+            scene_index = 0
+            frame_index = 10
+        else:
+            scene_index = np.random.randint(0, 10)
+            frame_index = np.random.randint(1, 20)
 
         # load images and poses
         for i in self.frame_idxs:
             inputs[("color", i, -1)] = self.get_color(scene_index, frame_index + i)
-            inputs[("pose", i, -1)] = self.get_cam(scene_index, frame_index + i)
-        self.K = inputs[("pose", 0, -1)]["intrinsics"]  # TODO: test
 
+            pose = self.get_cam(scene_index, frame_index + i)
+            inputs[("intrinsic", i, -1)] = pose["intrinsic"]
+            inputs[("extrinsic", i, -1)] = pose["extrinsic"]
+
+        # compute cam_T_cam for source frames, [0,-1,1]
+        for i in self.frame_idxs[1:]:
+            c2w = inputs[("extrinsic", 0, -1)]
+            w2c = la.inv(inputs[("extrinsic", i, -1)])
+            inputs[("cam_T_cam", 0, i)] = np.matmul(c2w, w2c)
+
+        self.K = inputs[("intrinsic", 0, -1)]
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
             K = self.K.copy()
 
-            K[0, :] *= self.width // (2 ** scale)  # TODO: original just ratio
-            K[1, :] *= self.height // (2 ** scale)
+            # K[0, :] *= self.width // (2 ** scale)
+            # K[1, :] *= self.height // (2 ** scale)
+            K = K // (2 ** scale)
 
             inv_K = np.linalg.pinv(K)
 
