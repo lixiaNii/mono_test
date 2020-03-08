@@ -33,7 +33,7 @@ class Trainer:
     def __init__(self, options):
         self.opt = options
         # self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
-        dir_name = os.path.join(datetime.datetime.now().strftime('%m_%d') + '_' +
+        dir_name = os.path.join(datetime.datetime.now().strftime('%m-%d') + '_' +
                                 datetime.datetime.now().strftime('%H-%M-%S') + '_' +
                                 self.opt.model_name)
         self.log_path = os.path.join(self.opt.log_dir, dir_name)
@@ -137,7 +137,7 @@ class Trainer:
 
             # 120 scenes in total, seems only to control steps
             num_train_samples = 120 * 30
-            self.opt.data_path = '/mnt/win_data2/data/lixia/MVS_Syn/GTAV_720'
+            # self.opt.data_path = '/mnt/win_data2/data/lixia/MVS_Syn/GTAV_720'
         # monodepth splits
         else:
             self.dataset = datasets_dict[self.opt.dataset]
@@ -392,7 +392,10 @@ class Trainer:
 
             _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
 
-            outputs[("depth", 0, scale)] = depth
+            if nl.use_gt_depth:
+                outputs[("depth", 0, scale)] = inputs[("gt_depth", 0, scale)]
+            else:
+                outputs[("depth", 0, scale)] = depth
 
             for i, frame_id in enumerate(self.opt.frame_ids[1:]):
 
@@ -416,7 +419,7 @@ class Trainer:
                     T = transformation_from_parameters(
                         axisangle[:, 0], translation[:, 0] * mean_inv_depth[:, 0], frame_id < 0)
 
-                cam_points = self.backproject_depth[source_scale](
+                cam_points = self.backproject_depth[source_scale](  # NL::reference frame
                     depth, inputs[("inv_K", source_scale)])
                 pix_coords = self.project_3d[source_scale](
                     cam_points, inputs[("K", source_scale)], T)

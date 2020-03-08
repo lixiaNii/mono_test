@@ -16,6 +16,9 @@ import torch
 import torch.utils.data as data
 from torchvision import transforms
 
+from numpy import linalg as la
+from options import nl
+
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning
@@ -137,8 +140,11 @@ class MonoDataset(data.Dataset):
         """
         inputs = {}
 
-        do_color_aug = self.is_train and random.random() > 0.5
-        do_flip = self.is_train and random.random() > 0.5
+        if nl.skip_aug:
+            do_color_aug, do_flip = False, False
+        else:
+            do_color_aug = self.is_train and random.random() > 0.5
+            do_flip = self.is_train and random.random() > 0.5
 
         line = self.filenames[index].split()
         folder = line[0]
@@ -159,6 +165,14 @@ class MonoDataset(data.Dataset):
                 inputs[("color", i, -1)] = self.get_color(folder, frame_index, other_side, do_flip)
             else:
                 inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
+                # inputs[("extrinsic", i, -1)] = self.get_pose()
+
+        # load gt pose and compute cam_T_cam for source frames, [0,-1,1] TODO:
+        # for i in self.frame_idxs[1:]:
+        #     c2w = inputs[("extrinsic", 0, -1)]
+        #     w2c = la.inv(inputs[("extrinsic", i, -1)])
+        #     inputs[("cam_T_cam", 0, i)] = np.matmul(c2w, w2c)
+
 
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):

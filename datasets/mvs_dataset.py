@@ -10,11 +10,13 @@ import torch.utils.data as data
 from torchvision import transforms
 
 from PIL import Image
+import imageio
 # import PIL.Image as pil
 import json
 from numpy import linalg as la
 
 from options import nl
+
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning
@@ -68,6 +70,11 @@ class MVSSynDataset(data.Dataset):
             "{:04d}{}".format(frame_index, ext))
         return path
 
+    def get_depth(self, scene_index, frame_index, do_flip=False):
+        "Load gt depth based on side"
+        depth = imageio.imread(self.get_path(scene_index, frame_index, type="depths", ext=".exr"))
+        return depth.transpose()
+
     def get_color(self, scene_index, frame_index, do_flip=False):
         "Load image based on side"
         color = self.loader(self.get_path(scene_index, frame_index, type="images", ext=".png"))
@@ -107,29 +114,29 @@ class MVSSynDataset(data.Dataset):
         bd = 8
         w, h = inputs[("color", 0, -1)].size
         for k in list(inputs):
-            if "color" in k:
+            if "color" or "gt_depth" in k:
                 n, im, i = k
                 # inputs[(n, im, i)] = inputs[(n, im, i)][bd:-bd, bd:-bd, :]
                 inputs[(n, im, i)] = inputs[(n, im, i)].crop((0, bd, w, h - bd))
 
-                # resize
+        # todo: add transformations for depth map, whether need scale?
         for k in list(inputs):
             frame = inputs[k]
-            if "color" in k:
+            if "color" or "gt_depth" in k:
                 n, im, i = k
                 for i in range(self.num_scales):
                     inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
 
         for k in list(inputs):
             f = inputs[k]
-            if "color" in k:
+            if "color" or "gt_depth" in k:
                 n, im, i = k
                 inputs[(n, im, i)] = self.to_tensor(f)
                 inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
 
     def __len__(self):
         return 120 * 30
-        # return len(self.filenames)  # TODO: check
+        # return len(self.filenames)
 
     # reference mono_dataset
     def __getitem__(self, index):
@@ -174,9 +181,10 @@ class MVSSynDataset(data.Dataset):
             scene_index = np.random.randint(0, 10)
             frame_index = np.random.randint(1, 20)
 
-        # load images and poses
+        # load images, poses, gt_depths
         for i in self.frame_idxs:
             inputs[("color", i, -1)] = self.get_color(scene_index, frame_index + i)
+            inputs[("gt_depth", i, -1)] = self.get_depth(scene_index, frame_index + i)
 
             pose = self.get_cam(scene_index, frame_index + i)
             inputs[("intrinsic", i, -1)] = pose["intrinsic"]

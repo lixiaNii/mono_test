@@ -19,29 +19,49 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 # ===========================================
 class NLParams():
     def __init__(self):
+        # set dataset
+        self.dataset = "mvs"
         self.use_mvs = True  # decide which dataset to use
+        self.use_odom = False  # kitti odom
+        self.use_kitti = False  # kitti raw
+
+        self.num_batch = 2  # orig: 12
+        self.num_workers = self.num_batch  # orig: 12
+
+        # Train setting
         self.use_refine = True  # same basic structure w/ original decoder
         self.use_gt_pose = True  # use gt pose to transform if True
+        self.use_gt_depth = True
         self.fix_sequence = True  # train on single sequence if True
 
         self.load_pretrain = {"encoder": True, "depth": True,
                               "pose_encoder": True, "pose": True}
 
-        self.num_batch = 2  # orig: 12
-        self.num_workers = self.num_batch  # orig: 12
-
-        self.model_name = "mono+stereo_640x192"
-        self.model_path = os.path.join("models", self.model_name)  # if not load, set None
-
-        self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
-
         self.skip_valid = True
+        self.skip_aug = True  # skip data augmentation
         self.learning_rate = 1e-5  # original: 1e-4
 
         # RefDepthDecoder settings
         self.settings = {"use_warp": False, "use_coarse": False,
                          "use_orig": False, "use_source": False,
                          "out_residual": False}
+
+        # Dataset settings
+        self.kitti = {"data_path": "KITTI/kitti_data", "eval_split": "eigen",
+                      "model_name": "mono+stereo_640x192"}
+        self.odom = {"data_path": "KITTI/odom", "eval_split": "odom_9",
+                     "model_name": "mono+stereo_odom_640x192"}
+        self.mvs = {"data_path": "MVS_Syn/GTAV_720", "eval_split": "eigen",
+                    "model_name": "mono+stereo_640x192"}  # use kitti trained model
+
+        if self.use_mvs:
+            self.data_settings = self.mvs
+        elif self.use_odom:
+            self.data_settings = self.odom
+
+        # Path settings
+        self.model_path = os.path.join("models", self.data_settings["model_name"])  # if not load, set None
+        self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
 
 
 nl = NLParams()
@@ -57,7 +77,7 @@ class MonodepthOptions:
         self.parser.add_argument("--data_path",
                                  type=str,
                                  help="path to the training data",
-                                 default=os.path.join(data_dir, "KITTI/odom"))
+                                 default=os.path.join(data_dir, nl.data_settings["data_path"]))
         # default=os.path.join(file_dir, "kitti_data"))
         self.parser.add_argument("--log_dir",
                                  type=str,
@@ -221,7 +241,7 @@ class MonodepthOptions:
                                  help="optional path to a .npy disparities file to evaluate")
         self.parser.add_argument("--eval_split",
                                  type=str,
-                                 default="eigen",
+                                 default=nl.data_settings["eval_split"],  # "eigen",
                                  choices=[
                                     "eigen", "eigen_benchmark", "benchmark", "odom_9", "odom_10"],
                                  help="which split to run eval on")

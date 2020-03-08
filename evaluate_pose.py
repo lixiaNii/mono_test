@@ -110,7 +110,7 @@ def evaluate(opt):
 
     gt_local_poses = []
     for i in range(1, len(gt_global_poses)):
-        gt_local_poses.append(
+        gt_local_poses.append(  # NL::why need the most outer inv??
             np.linalg.inv(np.dot(np.linalg.inv(gt_global_poses[i - 1]), gt_global_poses[i])))
 
     ates = []
