@@ -11,27 +11,33 @@ import argparse
 
 file_dir = os.path.dirname(__file__)  # the directory that options.py resides in
 # NL::
-data_dir = "/mnt/win_data2/data/lixia"
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+# data_dir = "/mnt/win_data2/data/lixia"
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 
 # NL::params
 # ===========================================
 class NLParams():
     def __init__(self):
-        # set dataset
-        self.dataset = "mvs"
-        self.use_mvs = True  # decide which dataset to use
-        self.use_odom = False  # kitti odom
-        self.use_kitti = False  # kitti raw
 
-        self.num_batch = 2  # orig: 12
+        # set server
+        self.server = "zju"  # cai4, haiyong
+        self.data_dir = {"zju": "/data/lixia/",
+                         "cai4": "/mnt/win_data2/data/lixia/"}
+        self.data_dir = self.data_dir[self.server]
+
+        # set dataset
+        self.dataset = "mvs_syn"  # ["kitti", "kitti_odom", "kitti_depth", "kitti_test"]
+        # self.use_mvs = True  # decide which dataset to use
+        # self.use_odom = False  # kitti odom
+        # self.use_kitti = False  # kitti raw
+        self.num_batch = 1  # orig: 12
         self.num_workers = self.num_batch  # orig: 12
 
         # Train setting
         self.use_refine = True  # same basic structure w/ original decoder
         self.use_gt_pose = True  # use gt pose to transform if True
-        self.use_gt_depth = True
+        self.use_gt_depth = False
         self.fix_sequence = True  # train on single sequence if True
 
         self.load_pretrain = {"encoder": True, "depth": True,
@@ -39,7 +45,7 @@ class NLParams():
 
         self.skip_valid = True
         self.skip_aug = True  # skip data augmentation
-        self.learning_rate = 1e-5  # original: 1e-4
+        self.learning_rate = 5e-5  # original: 1e-4
 
         # RefDepthDecoder settings
         self.settings = {"use_warp": False, "use_coarse": False,
@@ -47,25 +53,35 @@ class NLParams():
                          "out_residual": False}
 
         # Dataset settings
-        self.kitti = {"data_path": "KITTI/kitti_data", "eval_split": "eigen",
+        self.kitti = {"data_path": os.path.join(self.data_dir, "KITTI/kitti_data"),
+                      "eval_split": "eigen",
                       "model_name": "mono+stereo_640x192"}
-        self.odom = {"data_path": "KITTI/odom", "eval_split": "odom_9",
+        self.odom = {"data_path": os.path.join(self.data_dir, "KITTI/odom"),
+                     "eval_split": "odom_9",
                      "model_name": "mono+stereo_odom_640x192"}
-        self.mvs = {"data_path": "MVS_Syn/GTAV_720", "eval_split": "eigen",
+        self.mvs = {"data_path": os.path.join(self.data_dir, "MVS_Syn/GTAV_720"),
+                    "eval_split": "eigen",
                     "model_name": "mono+stereo_640x192"}  # use kitti trained model
 
-        if self.use_mvs:
+        if self.dataset == "mvs_syn":
             self.data_settings = self.mvs
-        elif self.use_odom:
+        elif self.dataset == "kitti_odom":
             self.data_settings = self.odom
+        elif self.dataset == "kitti":
+            self.data_settings = self.kitti
 
         # Path settings
+        self.log_dir = os.path.join(self.data_dir, "_rst/mono_test/logs")
+        self.cache_root = os.path.join(self.data_dir, "_rst/mono_test/cache")
         self.model_path = os.path.join("models", self.data_settings["model_name"])  # if not load, set None
-        self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
-
+        # self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
+        # self.cache_root = "/mnt/win_data2/data/lixia/_rst/mono_test/cache"
 
 nl = NLParams()
-
+# print out params
+nl_dict = nl.__dict__
+for key in nl_dict:
+    print(key, ":", nl_dict[key])
 
 # ===========================================
 
@@ -73,11 +89,14 @@ class MonodepthOptions:
     def __init__(self):
         self.parser = argparse.ArgumentParser(description="Monodepthv2 options")
 
+        # for run on jupyter, not sure why
+        self.parser.add_argument("-f", "--fff", help="a dummy argument to fool ipython", default="1")
+
         # PATHS
         self.parser.add_argument("--data_path",
                                  type=str,
                                  help="path to the training data",
-                                 default=os.path.join(data_dir, nl.data_settings["data_path"]))
+                                 default=nl.data_settings["data_path"])
         # default=os.path.join(file_dir, "kitti_data"))
         self.parser.add_argument("--log_dir",
                                  type=str,
@@ -103,7 +122,7 @@ class MonodepthOptions:
         self.parser.add_argument("--dataset",
                                  type=str,
                                  help="dataset to train on",
-                                 default="kitti_odom",
+                                 default=nl.dataset,  # "kitti_odom"
                                  choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test"])
         self.parser.add_argument("--png",
                                  help="if set, trains from raw KITTI png files (instead of jpgs)",
@@ -111,7 +130,7 @@ class MonodepthOptions:
         self.parser.add_argument("--height",
                                  type=int,
                                  help="input image height",
-                                 default=352 if nl.use_mvs else 192)
+                                 default=352 if nl.dataset == "mvs_syn" else 192)
         self.parser.add_argument("--width",
                                  type=int,
                                  help="input image width",

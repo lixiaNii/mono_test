@@ -129,8 +129,8 @@ class Trainer:
                          "mvs_syn": datasets.MVSSynDataset}  # NL::MVS Syn dataset
 
         # mvs, not standard splits
-        if nl.use_mvs:
-            self.dataset = datasets_dict["mvs_syn"]
+        if "mvs_syn" in self.opt.dataset:
+            self.dataset = datasets_dict[self.opt.dataset]
             train_filenames = None
             val_filenames = None
             img_ext = '.png'
@@ -393,9 +393,15 @@ class Trainer:
             _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
 
             if nl.use_gt_depth:
-                outputs[("depth", 0, scale)] = inputs[("gt_depth", 0, scale)]
+                depth = inputs[("gt_depth", 0, 0)]  # all use the same scale depth to warp
+                # depth = F.interpolate(
+                #     depth, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
+                depth_mask = 1 / depth != 0
+                depth = torch.where(depth_mask, depth * depth_mask, torch.zeros_like(depth))
+                outputs[("depth", 0, scale)] = depth
             else:
                 outputs[("depth", 0, scale)] = depth
+                # print("depth range: ", torch.min(depth), torch.max(depth))
 
             for i, frame_id in enumerate(self.opt.frame_ids[1:]):
 
@@ -430,6 +436,12 @@ class Trainer:
                     inputs[("color", frame_id, source_scale)],
                     outputs[("sample", frame_id, scale)],
                     padding_mode="border")
+
+                # check results ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                # save_images([outputs[("color", frame_id, scale)]],
+                #             names=["out_s{:02d}_f{:02d}".format(scale, frame_id)])
+                # save_images([inputs[("color", frame_id, scale)]],
+                #             names=["gt_s{:02d}_f{:02d}".format(scale, frame_id)])
 
                 if not self.opt.disable_automasking:
                     outputs[("color_identity", frame_id, scale)] = \
@@ -623,9 +635,11 @@ class Trainer:
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
         to_save = self.opt.__dict__.copy()
+        nl_save = nl.__dict__.copy()
 
         with open(os.path.join(models_dir, 'opt.json'), 'w') as f:
             json.dump(to_save, f, indent=2)
+            json.dump(nl_save, f, indent=2)
 
     def save_model(self):
         """Save model weights to disk

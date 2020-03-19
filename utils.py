@@ -14,17 +14,33 @@ from torchvision.utils import save_image
 
 
 # NL utils ===========================================================
+from options import nl
+import numpy as np
+import matplotlib.pyplot as plt
+
+
 def save_images(images, names):
-    """Save list of images with given names，
+    """Save list of images with given names"""
 
-    """
-    cache_root = '/mnt/win_data2/data/lixia/_rst/mono_test/cache'
-
-    root = cache_root
+    root = nl.cache_root
     for im, n in zip(images, names):
         # normed = im + 0.5
         normed = im[0]
         save_image(normed, os.path.join(root, n + '.png'))
+
+
+def save_depths(depths, names):
+    """Save list of real metric depths with given name"""
+    root = nl.cache_root
+    for d, n in zip(depths, names):
+        if not isinstance(d, np.ndarray):
+            to_save = d.detach().cpu().numpy()
+        else:
+            to_save = d
+        to_save = np.where(to_save > 1e-7, to_save, 1e7)  # make invalid region saved as zero
+        to_save = np.squeeze(1.0 / to_save)
+        # print(np.min(to_save), np.max(to_save))
+        plt.imsave(os.path.join(root, n + '.png'), to_save)  # equivalent to deepMVS
 
 
 # NL utils ===========================================================

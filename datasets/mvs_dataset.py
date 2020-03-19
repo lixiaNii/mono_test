@@ -14,8 +14,12 @@ import imageio
 # import PIL.Image as pil
 import json
 from numpy import linalg as la
+# from skimage.transform import rescale
+import cv2
+
 
 from options import nl
+from utils import save_depths
 
 
 def pil_loader(path):
@@ -73,7 +77,7 @@ class MVSSynDataset(data.Dataset):
     def get_depth(self, scene_index, frame_index, do_flip=False):
         "Load gt depth based on side"
         depth = imageio.imread(self.get_path(scene_index, frame_index, type="depths", ext=".exr"))
-        return depth.transpose()
+        return depth
 
     def get_color(self, scene_index, frame_index, do_flip=False):
         "Load image based on side"
@@ -102,6 +106,19 @@ class MVSSynDataset(data.Dataset):
         return {'extrinsic': la.inv(np.array(info['extrinsic']).astype(np.float32)).squeeze(),
                 'intrinsic': full_intrinsic.astype(np.float32)}
 
+    def scale_intrinsics(self, K, full_size=(1280, 720)):
+        """Scale intrinsics based on scale and crop
+            scale_f: scale factor between original input image and max scale input to network,
+                  note: fx, fy: only related to scale; cx, cy: related to both scale and crop"""
+        tK = K.copy()
+        # cuz may crop height, but scale factor on width is accurate
+        scale_f = self.width / full_size[0]
+        tK[0, 0] *= scale_f  # fx
+        tK[1, 1] *= scale_f  # fy
+        tK[0, 2] = tK[0, 2] / full_size[0] * self.width  # cx
+        tK[1, 2] = tK[1, 2] / full_size[1] * self.height  # cy
+        return tK
+
     def preprocess(self, inputs, color_aug):
         """Resize colour images to the required scales and augment if required
 
@@ -114,28 +131,42 @@ class MVSSynDataset(data.Dataset):
         bd = 8
         w, h = inputs[("color", 0, -1)].size
         for k in list(inputs):
-            if "color" or "gt_depth" in k:
+            if "color" in k:
                 n, im, i = k
                 # inputs[(n, im, i)] = inputs[(n, im, i)][bd:-bd, bd:-bd, :]
                 inputs[(n, im, i)] = inputs[(n, im, i)].crop((0, bd, w, h - bd))
+            if "gt_depth" in k:
+                n, im, i = k
+                inputs[(n, im, i)] = inputs[(n, im, i)][bd:-bd, :]
+                # save_depths(depths=[inputs[(n, im, i)]], names=["cropped_depth{:02d}".format(im)])
 
-        # todo: add transformations for depth map, whether need scale?
+        # scale
         for k in list(inputs):
             frame = inputs[k]
-            if "color" or "gt_depth" in k:
+            if "color" in k:
                 n, im, i = k
                 for i in range(self.num_scales):
                     inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
+            if "gt_depth" in k:  # seems no need to re-scale, cuz
+                n, im, i = k
+                for i in range(self.num_scales):
+                    w = self.width // 2 ** i
+                    h = self.height // 2 ** i
+                    inputs[(n, im, i)] = cv2.resize(inputs[(n, im, -1)], (w, h), interpolation=cv2.INTER_AREA)
+                    # inputs[(n, im, i)] = rescale(inputs[(n, im, i - 1)], 1/2)
+                    # save_depths(depths=[inputs[(n, im, i)]], names=["scaled_depth{:02d}_s{:02d}".format(im, i)])
+                    # inputs[(n, im, i)] = inputs[(n, im, i - 1)]
 
+        # convert to tensor
         for k in list(inputs):
             f = inputs[k]
-            if "color" or "gt_depth" in k:
+            if "color" in k or "gt_depth" in k:
                 n, im, i = k
                 inputs[(n, im, i)] = self.to_tensor(f)
                 inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
 
     def __len__(self):
-        return 120 * 30
+        return 120 * 30 * 10  # lengthen epochs
         # return len(self.filenames)
 
     # reference mono_dataset
@@ -176,7 +207,7 @@ class MVSSynDataset(data.Dataset):
         # MVS-Syn, 120 scenes, each w/ 100 images
         if nl.fix_sequence:
             scene_index = 0
-            frame_index = 10
+            frame_index = 10  # frame idx = 10, depth w/ error?
         else:
             scene_index = np.random.randint(0, 10)
             frame_index = np.random.randint(1, 20)
@@ -191,20 +222,22 @@ class MVSSynDataset(data.Dataset):
             inputs[("extrinsic", i, -1)] = pose["extrinsic"]
 
         # compute cam_T_cam for source frames, [0,-1,1]
+        # seq: w2c * c2w * cam_points
         for i in self.frame_idxs[1:]:
-            c2w = inputs[("extrinsic", 0, -1)]
-            w2c = la.inv(inputs[("extrinsic", i, -1)])
-            inputs[("cam_T_cam", 0, i)] = np.matmul(c2w, w2c)
+            c2w = inputs[("extrinsic", 0, -1)]  # ref cam
+            w2c = la.inv(inputs[("extrinsic", i, -1)])  # src cam
+            # inputs[("cam_T_cam", 0, i)] = np.matmul(c2w, w2c)
+            inputs[("cam_T_cam", 0, i)] = np.matmul(w2c, c2w)
 
-        self.K = inputs[("intrinsic", 0, -1)]
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
-            K = self.K.copy()
-
             # K[0, :] *= self.width // (2 ** scale)
             # K[1, :] *= self.height // (2 ** scale)
-            K = K // (2 ** scale)
+            # K = K / (2 ** scale)    # cuz K may not be divisible by 2
 
+            # original scale
+            K = self.scale_intrinsics(K=inputs[("intrinsic", 0, -1)])
+            K[:2, :] = K[:2, :] / (2 ** scale)  # value of other dims should not be changed
             inv_K = np.linalg.pinv(K)
 
             inputs[("K", scale)] = torch.from_numpy(K)
@@ -224,6 +257,7 @@ class MVSSynDataset(data.Dataset):
         for i in self.frame_idxs:
             del inputs[("color", i, -1)]
             del inputs[("color_aug", i, -1)]
+            del inputs[("gt_depth", i, -1)]
 
         # skip load depth...
         # if self.load_depth:
