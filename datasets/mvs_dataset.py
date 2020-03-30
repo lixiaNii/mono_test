@@ -166,7 +166,7 @@ class MVSSynDataset(data.Dataset):
                 inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
 
     def __len__(self):
-        return 120 * 30 * 10  # lengthen epochs
+        return 30 * 10  # lengthen epochs  120 * 30 * 10
         # return len(self.filenames)
 
     # reference mono_dataset
@@ -209,8 +209,12 @@ class MVSSynDataset(data.Dataset):
             scene_index = 0
             frame_index = 10  # frame idx = 10, depth w/ error?
         else:
-            scene_index = np.random.randint(0, 10)
-            frame_index = np.random.randint(1, 20)
+            while True:
+                scene_index = np.random.randint(0, 10)
+                frame_index = np.random.randint(1, 20)
+                if scene_index is 0 and frame_index is 1:  # avoid repeat frame, later may can use pose.
+                    continue
+                break
 
         # load images, poses, gt_depths
         for i in self.frame_idxs:

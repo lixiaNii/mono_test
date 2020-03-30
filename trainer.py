@@ -392,6 +392,9 @@ class Trainer:
 
             _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
 
+            # print("depth range: ", torch.min(depth), torch.max(depth))
+            # save_depths([depth], ["out_depth"])
+
             if nl.use_gt_depth:
                 depth = inputs[("gt_depth", 0, 0)]  # all use the same scale depth to warp
                 # depth = F.interpolate(

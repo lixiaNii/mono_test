@@ -38,7 +38,8 @@ def save_depths(depths, names):
         else:
             to_save = d
         to_save = np.where(to_save > 1e-7, to_save, 1e7)  # make invalid region saved as zero
-        to_save = np.squeeze(1.0 / to_save)
+        # to_save = np.squeeze(1.0 / to_save)
+        to_save = np.squeeze(to_save)
         # print(np.min(to_save), np.max(to_save))
         plt.imsave(os.path.join(root, n + '.png'), to_save)  # equivalent to deepMVS
 

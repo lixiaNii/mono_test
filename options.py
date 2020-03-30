@@ -12,7 +12,7 @@ import argparse
 file_dir = os.path.dirname(__file__)  # the directory that options.py resides in
 # NL::
 # data_dir = "/mnt/win_data2/data/lixia"
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 
 # NL::params
@@ -38,7 +38,7 @@ class NLParams():
         self.use_refine = True  # same basic structure w/ original decoder
         self.use_gt_pose = True  # use gt pose to transform if True
         self.use_gt_depth = False
-        self.fix_sequence = True  # train on single sequence if True
+        self.fix_sequence = False  # train on single sequence if True
 
         self.load_pretrain = {"encoder": True, "depth": True,
                               "pose_encoder": True, "pose": True}
@@ -73,9 +73,18 @@ class NLParams():
         # Path settings
         self.log_dir = os.path.join(self.data_dir, "_rst/mono_test/logs")
         self.cache_root = os.path.join(self.data_dir, "_rst/mono_test/cache")
-        self.model_path = os.path.join("models", self.data_settings["model_name"])  # if not load, set None
+
+        self.well_trained = True
+        if self.well_trained:
+            # load well trained models from monodepth2
+            self.model_path = os.path.join("models", self.data_settings["model_name"])  # if not load, set None
+        else:
+            # load testing models
+            model_name = "03-26_23-08-41_mdp/models/weights_331"
+            self.model_path = os.path.join(self.log_dir, model_name)
         # self.log_dir = "/mnt/win_data2/data/lixia/_rst/mono_test/logs"
         # self.cache_root = "/mnt/win_data2/data/lixia/_rst/mono_test/cache"
+
 
 nl = NLParams()
 # print out params
@@ -151,7 +160,7 @@ class MonodepthOptions:
         self.parser.add_argument("--max_depth",
                                  type=float,
                                  help="maximum depth",
-                                 default=100.0)
+                                 default=6000.0)  # originally 100.
         self.parser.add_argument("--use_stereo",
                                  help="if set, uses stereo pair for training",
                                  action="store_true")
@@ -173,7 +182,7 @@ class MonodepthOptions:
         self.parser.add_argument("--num_epochs",
                                  type=int,
                                  help="number of epochs",
-                                 default=20)
+                                 default=20 * 120)  # 20
         self.parser.add_argument("--scheduler_step_size",
                                  type=int,
                                  help="step size of the scheduler",
@@ -239,7 +248,7 @@ class MonodepthOptions:
         self.parser.add_argument("--save_frequency",
                                  type=int,
                                  help="number of epochs between each save",
-                                 default=1)
+                                 default=50)
 
         # EVALUATION options
         self.parser.add_argument("--eval_stereo",
